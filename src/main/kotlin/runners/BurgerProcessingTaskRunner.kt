@@ -1,5 +1,6 @@
 package runners
 
+import config.BurgerProcessingTaskConfig
 import io.github.oshai.kotlinlogging.KotlinLogging
 import models.Order
 import services.OrderIdGenerationService
@@ -17,9 +18,7 @@ class BurgerProcessingTaskRunner(
     private val customersQueuedCount: AtomicInteger,
     private val orders: Queue<Order>,
     private val orderIdGenerationService: OrderIdGenerationService,
-    private val cookedBurgerLimit: Int = 5,
-    private val completeOrdersLimit: Int = 15,
-    private val operationalDelaySeconds: Int = 2
+    private val config: BurgerProcessingTaskConfig
 ) : Runnable {
 
     private val tasks = mutableListOf(this::cookBurger, this::dressBurger, this::serveBurger, this::takeOrder)
@@ -39,13 +38,13 @@ class BurgerProcessingTaskRunner(
                             logger.info { "model=burger_processing_task_runner, task=${task.name}, status=$status, metadata={thread_name=${Thread.currentThread().name}, task_id=$taskId}" }
                         }
                 }
-            Thread.sleep(operationalDelaySeconds*1000L)
+            Thread.sleep(config.operationalDelaySeconds*1000L)
         }
         return
     }
 
     private fun cookBurger(): Int {
-        if(cookedBurgers.get() < cookedBurgerLimit) {
+        if(cookedBurgers.get() < config.cookedBurgerLimit) {
             cookedBurgers.incrementAndGet()
             return 1
         }
@@ -97,7 +96,7 @@ class BurgerProcessingTaskRunner(
     }
 
     private fun ConcurrentLinkedQueue<Order>.addAndManageCompleteOrders(newCompleteOrder: Order) {
-        if (this.size > completeOrdersLimit) {
+        if (this.size > config.completeOrdersLimit) {
             this.remove()
         }
         this.add(newCompleteOrder)

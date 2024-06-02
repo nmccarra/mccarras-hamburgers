@@ -1,12 +1,18 @@
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory
+import com.fasterxml.jackson.module.kotlin.registerKotlinModule
+import config.McCarrasHamburgersConfiguration
 import io.github.oshai.kotlinlogging.KotlinLogging
 import models.Order
 import models.threads.GroupNamedThreadFactory
 import runners.BurgerProcessingTaskRunner
 import services.OrderIdGenerationService
+import java.io.File
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.random.Random
+
 
 /**
  * McCarra's Burgers
@@ -42,6 +48,14 @@ class Main {
 
     private val orderIdGenerationService = OrderIdGenerationService()
 
+    private val mapper = ObjectMapper(YAMLFactory())
+        .registerKotlinModule()
+
+    private val config = mapper.readValue(
+        File(Main::class.java.getResource("config.yaml").file),
+        McCarrasHamburgersConfiguration::class.java
+    )
+
     private fun burgerProcessingTaskRunner(taskId: String) = BurgerProcessingTaskRunner(
         taskId = taskId,
         pendingOrders = pendingOrders,
@@ -50,15 +64,17 @@ class Main {
         dressedBurgers = dressedBurgersCount,
         customersQueuedCount = customersQueuedCount,
         orders = pendingOrders,
-        orderIdGenerationService = orderIdGenerationService
+        orderIdGenerationService = orderIdGenerationService,
+        config = config.burgerProcessingTaskConfig
     )
 
-    private val restaurantManagementThreadPool = Executors.newFixedThreadPool(2, GroupNamedThreadFactory("restaurant-management"))
+    private val restaurantManagementThreadPool = Executors.newFixedThreadPool(config.restaurantManagementThreadPoolSize, GroupNamedThreadFactory("restaurant-management"))
 
     fun run() {
-        logger.info { "model=main, operation=run, status=started" }
+        logger.info { "model=main, operation=run, status=started, metadata={config=$config}" }
         while (true) {
 
+            // either add a customer or not on each pass
             val customersToGenerate = Random.nextInt(0,2)
 
             repeat(customersToGenerate) {
@@ -74,16 +90,14 @@ class Main {
             logger.info { "model=dressed_burgers, count=${dressedBurgersCount}" }
 
 
-            val burgerProcessingJobs =
-
-                listOf(
-                    restaurantManagementThreadPool.submit(burgerProcessingTaskRunner("task_1")),
-                    restaurantManagementThreadPool.submit(burgerProcessingTaskRunner("task_2"))
-                )
+            val burgerProcessingJobs = (1..config.burgerProcessingTaskInstancesPerCycle)
+                .map {
+                    restaurantManagementThreadPool.submit(burgerProcessingTaskRunner("task_$it"))
+                }
 
             while (!burgerProcessingJobs.all { it.isDone }) {
                 // allow for a pause so that processing isn't too fast
-                Thread.sleep(1*1000L)
+                Thread.sleep(config.cyclePauseTimeSeconds*1000L)
             }
         }
     }
