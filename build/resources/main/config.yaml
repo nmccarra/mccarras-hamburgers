@@ -1,0 +1,9 @@
+#config.yaml
+
+restaurantManagementThreadPoolSize: 2
+burgerProcessingTaskInstancesPerCycle: 2
+cyclePauseTimeSeconds: 2
+burgerProcessingTaskConfig:
+  cookedBurgerLimit: 5
+  completeOrdersLimit: 15
+  operationalDelaySeconds: 2
